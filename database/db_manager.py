@@ -1544,6 +1544,7 @@ class DatabaseManager:
     
     def _row_to_monthly_plan(self, row) -> MonthlyPlan:
         """Преобразование строки БД в объект MonthlyPlan"""
+        row_keys = set(row.keys())
         return MonthlyPlan(
             id=row['id'],
             plan_id=row['plan_id'],
@@ -1579,11 +1580,11 @@ class DatabaseManager:
             plan_runway=row['plan_runway'],
             plan_ltv_cac_ratio=row['plan_ltv_cac_ratio'],
             plan_cac_payback_months=row['plan_cac_payback_months'],
-            plan_total_customers=row.get('plan_total_customers', 0),
-            plan_churned_customers=row.get('plan_churned_customers', 0),
-            plan_cash_balance=row.get('plan_cash_balance', 0.0),
-            plan_cac=row.get('plan_cac', 0.0),
-            plan_ltv=row.get('plan_ltv', 0.0),
+            plan_total_customers=row['plan_total_customers'] if 'plan_total_customers' in row_keys else 0,
+            plan_churned_customers=row['plan_churned_customers'] if 'plan_churned_customers' in row_keys else 0,
+            plan_cash_balance=row['plan_cash_balance'] if 'plan_cash_balance' in row_keys else 0.0,
+            plan_cac=row['plan_cac'] if 'plan_cac' in row_keys else 0.0,
+            plan_ltv=row['plan_ltv'] if 'plan_ltv' in row_keys else 0.0,
             is_locked=bool(row['is_locked']),
             seasonality_factor=row['seasonality_factor'],
             created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None,
@@ -1592,6 +1593,7 @@ class DatabaseManager:
     
     def _row_to_actual_data(self, row) -> ActualData:
         """Преобразование строки БД в объект ActualData"""
+        row_keys = set(row.keys())
         return ActualData(
             id=row['id'],
             monthly_plan_id=row['monthly_plan_id'],
@@ -1630,10 +1632,10 @@ class DatabaseManager:
             variance_runway=row['variance_runway'],
             variance_cac=row['variance_cac'],
             variance_new_customers=row['variance_new_customers'],
-            actual_churned_customers=row.get('actual_churned_customers', 0),
-            actual_total_customers=row.get('actual_total_customers', 0),
-            actual_cash_balance=row.get('actual_cash_balance', 0.0),
-            actual_ltv=row.get('actual_ltv', 0.0),
+            actual_churned_customers=row['actual_churned_customers'] if 'actual_churned_customers' in row_keys else 0,
+            actual_total_customers=row['actual_total_customers'] if 'actual_total_customers' in row_keys else 0,
+            actual_cash_balance=row['actual_cash_balance'] if 'actual_cash_balance' in row_keys else 0.0,
+            actual_ltv=row['actual_ltv'] if 'actual_ltv' in row_keys else 0.0,
             data_source=row['data_source'],
             import_file=row['import_file'],
             notes=row['notes'],
