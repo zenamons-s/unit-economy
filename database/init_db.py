@@ -142,6 +142,13 @@ def init_database(db_path: str = 'database/saas_finance.db'):
         plan_runway REAL DEFAULT 0,
         plan_ltv_cac_ratio REAL DEFAULT 0,
         plan_cac_payback_months REAL DEFAULT 0,
+
+        -- Дополнительные поля для совместимости
+        plan_total_customers INTEGER DEFAULT 0,
+        plan_churned_customers INTEGER DEFAULT 0,
+        plan_cash_balance REAL DEFAULT 0,
+        plan_cac REAL DEFAULT 0,
+        plan_ltv REAL DEFAULT 0,
         
         -- ФЛАГИ И СТАТУСЫ
         is_locked BOOLEAN DEFAULT 0,  -- Заблокирован для изменений
@@ -159,7 +166,10 @@ def init_database(db_path: str = 'database/saas_finance.db'):
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS actual_data (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        monthly_plan_id INTEGER NOT NULL,
+        monthly_plan_id INTEGER,
+        company_id INTEGER,
+        year INTEGER NOT NULL,
+        month_number INTEGER NOT NULL,
         
         -- REVENUE ACTUAL
         actual_mrr REAL DEFAULT 0,
@@ -204,6 +214,12 @@ def init_database(db_path: str = 'database/saas_finance.db'):
         variance_runway REAL DEFAULT 0,
         variance_cac REAL DEFAULT 0,
         variance_new_customers REAL DEFAULT 0,
+
+        -- Дополнительные поля для совместимости
+        actual_churned_customers INTEGER DEFAULT 0,
+        actual_total_customers INTEGER DEFAULT 0,
+        actual_cash_balance REAL DEFAULT 0,
+        actual_ltv REAL DEFAULT 0,
         
         -- МЕТАДАННЫЕ
         data_source TEXT DEFAULT 'manual',  -- manual, excel, api
@@ -218,6 +234,7 @@ def init_database(db_path: str = 'database/saas_finance.db'):
         verified_by INTEGER,
         
         FOREIGN KEY (monthly_plan_id) REFERENCES monthly_plans (id),
+        FOREIGN KEY (company_id) REFERENCES companies (id),
         FOREIGN KEY (recorded_by) REFERENCES users (id),
         FOREIGN KEY (verified_by) REFERENCES users (id)
     )
