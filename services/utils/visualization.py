@@ -18,6 +18,8 @@ import json
 import io
 import base64
 
+from services.utils.math_utils import safe_divide
+
 class VisualizationEngine:
     """
     Движок визуализации для SaaS метрик
@@ -138,7 +140,7 @@ class VisualizationEngine:
                 curr_mrr = df.iloc[i]['plan_mrr']
                 
                 if prev_mrr > 0:
-                    growth = (curr_mrr - prev_mrr) / prev_mrr
+                    growth = safe_divide(curr_mrr - prev_mrr, prev_mrr)
                     
                     if abs(growth) > 0.2:  # Изменение более 20%
                         fig.add_annotation(

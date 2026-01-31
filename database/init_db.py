@@ -10,11 +10,15 @@ from pathlib import Path
 
 def init_database(db_path: str = 'database/saas_finance.db'):
     """Инициализация базы данных с созданием всех таблиц"""
-    
+
+    from database.path_utils import resolve_db_path
+
+    resolved_path = resolve_db_path(db_path)
+
     # Создаем директорию если не существует
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    
-    conn = sqlite3.connect(db_path)
+    os.makedirs(resolved_path.parent, exist_ok=True)
+
+    conn = sqlite3.connect(resolved_path)
     cursor = conn.cursor()
     
     # Включаем foreign keys
@@ -555,12 +559,13 @@ def init_database(db_path: str = 'database/saas_finance.db'):
                 'pre_seed', 'B2B SaaS', 'Russia', 25000, 5, 5000, 3, 2000000)
         ''', (demo_user_id,))
     
+    table_count = get_table_count(conn)
     conn.commit()
     conn.close()
-    
-    print(f"✅ База данных успешно инициализирована: {db_path}")
-    print(f"📊 Создано таблиц: 11")
-    print(f"📈 Загружено эталонных метрик: {get_benchmark_count(db_path)}")
+
+    print(f"✅ База данных успешно инициализирована: {resolved_path}")
+    print(f"📊 Создано таблиц: {table_count}")
+    print(f"📈 Загружено эталонных метрик: {get_benchmark_count(str(resolved_path))}")
 
 def insert_benchmark_data(cursor):
     """Вставка эталонных метрик SaaS из реальных исследований"""
@@ -632,7 +637,10 @@ def insert_benchmark_data(cursor):
 def get_benchmark_count(db_path: str) -> int:
     """Получение количества эталонных метрик в базе"""
     try:
-        conn = sqlite3.connect(db_path)
+        from database.path_utils import resolve_db_path
+
+        resolved_path = resolve_db_path(db_path)
+        conn = sqlite3.connect(resolved_path)
         cursor = conn.cursor()
         cursor.execute('SELECT COUNT(*) FROM benchmark_metrics')
         count = cursor.fetchone()[0]
@@ -641,35 +649,53 @@ def get_benchmark_count(db_path: str) -> int:
     except:
         return 0
 
+def get_table_count(conn: sqlite3.Connection) -> int:
+    """Получение количества таблиц в базе"""
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        return cursor.fetchone()[0]
+    except Exception:
+        return 0
+
 def reset_database(db_path: str = 'database/saas_finance.db'):
     """Сброс базы данных (использовать с осторожностью!)"""
-    
-    confirmation = input(f"⚠️  ВНИМАНИЕ: Это удалит ВСЕ данные в {db_path}\nВведите 'DELETE' для подтверждения: ")
+
+    from database.path_utils import resolve_db_path
+
+    resolved_path = resolve_db_path(db_path)
+
+    confirmation = input(
+        f"⚠️  ВНИМАНИЕ: Это удалит ВСЕ данные в {resolved_path}\nВведите 'DELETE' для подтверждения: "
+    )
     
     if confirmation == 'DELETE':
-        if os.path.exists(db_path):
-            os.remove(db_path)
-            print(f"🗑️  База данных удалена: {db_path}")
-        
-        init_database(db_path)
+        if resolved_path.exists():
+            os.remove(resolved_path)
+            print(f"🗑️  База данных удалена: {resolved_path}")
+
+        init_database(str(resolved_path))
         print("✅ База данных пересоздана с начальными данными")
     else:
         print("❌ Отменено пользователем")
 
 def backup_database(db_path: str = 'database/saas_finance.db'):
     """Создание резервной копии базы данных"""
-    
-    backup_dir = 'database/backups'
+
+    from database.path_utils import resolve_db_path
+
+    resolved_path = resolve_db_path(db_path)
+    backup_dir = resolved_path.parent / "backups"
     os.makedirs(backup_dir, exist_ok=True)
-    
+
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    backup_path = os.path.join(backup_dir, f'saas_finance_backup_{timestamp}.db')
-    
+    backup_path = backup_dir / f"saas_finance_backup_{timestamp}.db"
+
     import shutil
-    shutil.copy2(db_path, backup_path)
-    
+    shutil.copy2(resolved_path, backup_path)
+
     print(f"✅ Резервная копия создана: {backup_path}")
-    return backup_path
+    return str(backup_path)
 
 if __name__ == "__main__":
     print("🚀 Инициализация базы данных SaaS Financial Planning System")

@@ -11,6 +11,8 @@ from dataclasses import dataclass
 import plotly.graph_objects as go
 from scipy import stats
 
+from services.utils.math_utils import safe_divide
+
 @dataclass
 class VarianceAnalysis:
     """Анализ отклонений"""
@@ -168,7 +170,7 @@ class VarianceAnalyzer:
                 variance_amount = actual_value - planned_value
                 
                 if planned_value != 0:
-                    variance_percent = (variance_amount / abs(planned_value)) * 100
+                    variance_percent = safe_divide(variance_amount, abs(planned_value)) * 100
                 else:
                     variance_percent = 100 if actual_value > 0 else 0
                 
@@ -373,10 +375,10 @@ class VarianceAnalyzer:
             customers_variance = next(v for v in variances if v['metric'] == 'plan_new_customers')
             
             # Анализируем relationship
-            planned_arpu = planned['plan_total_revenue'] / planned['plan_new_customers'] if planned['plan_new_customers'] > 0 else 0
-            actual_arpu = actual['plan_total_revenue'] / actual['plan_new_customers'] if actual['plan_new_customers'] > 0 else 0
+            planned_arpu = safe_divide(planned['plan_total_revenue'], planned['plan_new_customers'])
+            actual_arpu = safe_divide(actual['plan_total_revenue'], actual['plan_new_customers'])
             
-            if abs(actual_arpu - planned_arpu) / planned_arpu > 0.2:
+            if safe_divide(abs(actual_arpu - planned_arpu), planned_arpu) > 0.2:
                 causes.append("Изменение средней цены (ARPU) на клиента")
             else:
                 causes.append("Проблемы с customer acquisition")
@@ -388,8 +390,8 @@ class VarianceAnalyzer:
             cac_variance = next(v for v in variances if v['metric'] == 'plan_marketing_budget')
             customers_variance = next(v for v in variances if v['metric'] == 'plan_new_customers')
             
-            planned_cac = planned['plan_marketing_budget'] / planned['plan_new_customers'] if planned['plan_new_customers'] > 0 else 0
-            actual_cac = actual['plan_marketing_budget'] / actual['plan_new_customers'] if actual['plan_new_customers'] > 0 else 0
+            planned_cac = safe_divide(planned['plan_marketing_budget'], planned['plan_new_customers'])
+            actual_cac = safe_divide(actual['plan_marketing_budget'], actual['plan_new_customers'])
             
             if actual_cac > planned_cac * 1.5:
                 causes.append("Ухудшение эффективности маркетинга (CAC увеличен)")
@@ -593,12 +595,12 @@ class VarianceAnalyzer:
                     actual_val = actual[metric]
                     
                     if planned_val != 0:
-                        variance = abs(actual_val - planned_val) / abs(planned_val)
+                        variance = safe_divide(abs(actual_val - planned_val), abs(planned_val))
                         total_variance += variance
                         metric_count += 1
             
             if metric_count > 0:
-                avg_variance = total_variance / metric_count
+                avg_variance = safe_divide(total_variance, metric_count)
                 monthly_variances.append({
                     'month': data['month_name'],
                     'month_number': data['planned'].get('month_number'),
@@ -711,7 +713,7 @@ class VarianceAnalyzer:
                 planned_rev = planned['plan_total_revenue']
                 actual_rev = actual['plan_total_revenue']
                 if planned_rev != 0:
-                    revenue_variances.append((actual_rev - planned_rev) / planned_rev * 100)
+                    revenue_variances.append(safe_divide(actual_rev - planned_rev, planned_rev) * 100)
                 else:
                     revenue_variances.append(0)
             
@@ -720,7 +722,7 @@ class VarianceAnalyzer:
                 planned_cost = planned['plan_total_costs']
                 actual_cost = actual['plan_total_costs']
                 if planned_cost != 0:
-                    cost_variances.append((actual_cost - planned_cost) / planned_cost * 100)
+                    cost_variances.append(safe_divide(actual_cost - planned_cost, planned_cost) * 100)
                 else:
                     cost_variances.append(0)
         

@@ -13,6 +13,8 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 import logging
 
+from database.path_utils import resolve_db_path
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -218,12 +220,19 @@ class DatabaseManager:
     
     def __init__(self, db_path: str = 'database/saas_finance.db'):
         if not self._initialized:
-            self.db_path = db_path
+            self.db_path = resolve_db_path(db_path)
             self._initialized = True
+        elif db_path:
+            self.db_path = resolve_db_path(db_path)
+
+    def set_db_path(self, db_path: str) -> None:
+        """Обновление пути к базе данных (используется в тестах и CLI)."""
+        self.db_path = resolve_db_path(db_path)
     
     def get_connection(self) -> sqlite3.Connection:
         """Получение соединения с базой данных"""
         try:
+            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
             conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
@@ -239,6 +248,18 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
+                # Таблица пользователей
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username TEXT UNIQUE NOT NULL,
+                        email TEXT UNIQUE,
+                        role TEXT DEFAULT 'user',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
                 # Создание таблицы companies
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS companies (
@@ -246,7 +267,7 @@ class DatabaseManager:
                         user_id INTEGER,
                         name TEXT NOT NULL,
                         description TEXT,
-                        stage TEXT DEFAULT 'pre_seed',
+                        stage TEXT NOT NULL DEFAULT 'pre_seed',
                         industry TEXT,
                         country TEXT DEFAULT 'Russia',
                         currency TEXT DEFAULT 'RUB',
@@ -259,7 +280,8 @@ class DatabaseManager:
                         reporting_currency TEXT DEFAULT 'RUB',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        is_active BOOLEAN DEFAULT 1
+                        is_active BOOLEAN DEFAULT 1,
+                        FOREIGN KEY (user_id) REFERENCES users (id)
                     )
                 ''')
                 
@@ -281,7 +303,9 @@ class DatabaseManager:
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         activated_at TIMESTAMP,
-                        FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE CASCADE
+                        FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE CASCADE,
+                        FOREIGN KEY (created_by) REFERENCES users (id),
+                        UNIQUE(company_id, plan_year, version)
                     )
                 ''')
                 
@@ -291,9 +315,9 @@ class DatabaseManager:
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         plan_id INTEGER NOT NULL,
                         month_number INTEGER NOT NULL,
-                        month_name TEXT NOT NULL,
+                        month_name TEXT,
                         year INTEGER NOT NULL,
-                        quarter INTEGER NOT NULL,
+                        quarter INTEGER,
                         
                         -- Revenue
                         plan_mrr REAL DEFAULT 0.0,
@@ -346,7 +370,8 @@ class DatabaseManager:
                         
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (plan_id) REFERENCES financial_plans (id) ON DELETE CASCADE
+                        FOREIGN KEY (plan_id) REFERENCES financial_plans (id) ON DELETE CASCADE,
+                        UNIQUE(plan_id, month_number, year)
                     )
                 ''')
                 
@@ -428,22 +453,22 @@ class DatabaseManager:
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS ai_recommendations (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        monthly_plan_id INTEGER NOT NULL,
+                        monthly_plan_id INTEGER,
                         actual_data_id INTEGER,
-                        recommendation_type TEXT,
+                        recommendation_type TEXT NOT NULL,
                         category TEXT,
-                        priority TEXT DEFAULT 'medium',
+                        priority TEXT NOT NULL,
                         title TEXT NOT NULL,
-                        description TEXT,
-                        actions TEXT,
+                        description TEXT NOT NULL,
+                        actions TEXT NOT NULL,
                         expected_impact TEXT,
-                        expected_metric_impact REAL,
+                        expected_metric_impact TEXT,
                         analysis TEXT,
                         benchmark_comparison TEXT,
                         success_metrics TEXT,
                         status TEXT DEFAULT 'pending',
                         assigned_to INTEGER,
-                        due_date TIMESTAMP,
+                        due_date DATE,
                         feedback TEXT,
                         feedback_by INTEGER,
                         feedback_at TIMESTAMP,
@@ -473,9 +498,120 @@ class DatabaseManager:
                         target_value REAL,
                         calculation_formula TEXT,
                         measurement_unit TEXT,
-                        period TEXT,
-                        source_name TEXT,
-                        description TEXT
+                        period TEXT DEFAULT 'monthly',
+                        source_name TEXT NOT NULL,
+                        source_url TEXT,
+                        publication_year INTEGER,
+                        description TEXT,
+                        notes TEXT,
+                        is_active BOOLEAN DEFAULT 1,
+                        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_by TEXT DEFAULT 'system',
+                        UNIQUE(metric_name, stage, industry, source_name)
+                    )
+                ''')
+
+                # Таблица Capex Items
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS capex_items (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        monthly_plan_id INTEGER,
+                        company_id INTEGER,
+                        item_name TEXT NOT NULL,
+                        description TEXT,
+                        category TEXT NOT NULL,
+                        subcategory TEXT,
+                        purchase_cost REAL NOT NULL,
+                        purchase_date DATE NOT NULL,
+                        estimated_useful_life INTEGER NOT NULL,
+                        residual_value REAL DEFAULT 0,
+                        depreciation_method TEXT DEFAULT 'straight_line',
+                        monthly_depreciation REAL,
+                        accumulated_depreciation REAL DEFAULT 0,
+                        net_book_value REAL,
+                        vendor TEXT,
+                        warranty_period INTEGER,
+                        location TEXT,
+                        status TEXT DEFAULT 'planned',
+                        disposal_date DATE,
+                        disposal_value REAL,
+                        assigned_to TEXT,
+                        department TEXT,
+                        notes TEXT,
+                        attachments TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (monthly_plan_id) REFERENCES monthly_plans (id),
+                        FOREIGN KEY (company_id) REFERENCES companies (id)
+                    )
+                ''')
+
+                # Таблица сценариев
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS scenarios (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        company_id INTEGER NOT NULL,
+                        plan_id INTEGER,
+                        scenario_name TEXT NOT NULL,
+                        description TEXT,
+                        scenario_type TEXT NOT NULL,
+                        base_scenario_id INTEGER,
+                        changes TEXT NOT NULL,
+                        assumptions TEXT,
+                        projected_metrics TEXT,
+                        projected_monthly_plans TEXT,
+                        impact_analysis TEXT,
+                        created_by INTEGER,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (company_id) REFERENCES companies (id),
+                        FOREIGN KEY (plan_id) REFERENCES financial_plans (id),
+                        FOREIGN KEY (created_by) REFERENCES users (id),
+                        FOREIGN KEY (base_scenario_id) REFERENCES scenarios (id)
+                    )
+                ''')
+
+                # Таблица отчетов
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS reports (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        company_id INTEGER NOT NULL,
+                        report_type TEXT NOT NULL,
+                        report_title TEXT NOT NULL,
+                        report_data TEXT NOT NULL,
+                        generated_by INTEGER,
+                        generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        exported_at TIMESTAMP,
+                        export_format TEXT,
+                        FOREIGN KEY (company_id) REFERENCES companies (id),
+                        FOREIGN KEY (generated_by) REFERENCES users (id)
+                    )
+                ''')
+
+                # Таблица активности пользователей
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS user_activity (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        activity_type TEXT NOT NULL,
+                        activity_description TEXT,
+                        metadata TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users (id)
+                    )
+                ''')
+
+                # Таблица настроек приложения
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS app_settings (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        setting_key TEXT UNIQUE NOT NULL,
+                        setting_value TEXT NOT NULL,
+                        setting_type TEXT NOT NULL,
+                        category TEXT DEFAULT 'general',
+                        description TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
                 
@@ -484,9 +620,15 @@ class DatabaseManager:
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_is_active ON companies(is_active)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_financial_plans_company_id ON financial_plans(company_id)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_financial_plans_is_active ON financial_plans(is_active)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_financial_plans_status ON financial_plans(status)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_monthly_plans_plan_id ON monthly_plans(plan_id)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_actual_data_company_id ON actual_data(company_id)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_actual_data_month_year ON actual_data(year, month_number)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_actual_data_monthly_plan_id ON actual_data(monthly_plan_id)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_actual_data_recorded_at ON actual_data(recorded_at)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_recommendations_monthly_plan_id ON ai_recommendations(monthly_plan_id)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_recommendations_status ON ai_recommendations(status)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_recommendations_priority ON ai_recommendations(priority)')
                 
                 conn.commit()
                 logger.info("База данных инициализирована")
@@ -494,6 +636,29 @@ class DatabaseManager:
         except sqlite3.Error as e:
             logger.error(f"Ошибка инициализации БД: {e}")
             raise
+
+    def list_tables(self) -> List[str]:
+        """Получение списка таблиц в базе данных."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            )
+            return sorted(row[0] for row in cursor.fetchall())
+
+    def reset_database(self) -> None:
+        """Полный сброс базы данных с пересозданием схемы."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = OFF")
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            )
+            tables = [row[0] for row in cursor.fetchall()]
+            for table in tables:
+                cursor.execute(f'DROP TABLE IF EXISTS "{table}"')
+            conn.commit()
+        self.initialize_database()
     
     # ==================== COMPANY METHODS ====================
     

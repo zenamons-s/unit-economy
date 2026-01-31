@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from dataclasses import dataclass
 from scipy import stats
+from services.utils.math_utils import safe_divide
 
 @dataclass
 class Cohort:
@@ -204,7 +205,7 @@ class RealisticCohortAnalyzer:
                     
                     # Рассчитываем retention rate
                     if len(cohort_customers) > 0:
-                        retention_rate = len(active_in_period) / len(cohort_customers)
+                        retention_rate = safe_divide(len(active_in_period), len(cohort_customers))
                         retention_matrix.loc[cohort_period, f'Month {i}'] = retention_rate
                     else:
                         retention_matrix.loc[cohort_period, f'Month {i}'] = 0
@@ -238,7 +239,7 @@ class RealisticCohortAnalyzer:
             
             # Рассчитываем LTV на клиента
             if len(cohort_customers) > 0:
-                cohort_ltv = cohort_revenue / len(cohort_customers)
+                cohort_ltv = safe_divide(cohort_revenue, len(cohort_customers))
             else:
                 cohort_ltv = 0
             
@@ -256,7 +257,7 @@ class RealisticCohortAnalyzer:
         
         # Рассчитываем средний LTV
         if cohort_count > 0:
-            ltv_results['average_ltv'] = total_ltv / cohort_count
+            ltv_results['average_ltv'] = safe_divide(total_ltv, cohort_count)
         
         # Распределение LTV
         ltv_values = list(ltv_results['cohort_ltv'].values())
@@ -512,7 +513,7 @@ class RealisticCohortAnalyzer:
         if 'churn_rate' in ltv_analysis.get('forecast', {}):
             churn_rate = ltv_analysis['forecast']['churn_rate']
             if churn_rate > 0:
-                expected_lifetime = 1 / churn_rate
+                expected_lifetime = safe_divide(1, churn_rate)
                 
                 if expected_lifetime < 6:
                     insights.append({
@@ -611,7 +612,7 @@ class RealisticCohortAnalyzer:
         
         # Простой LTV (без дисконтирования)
         if churn_rate > 0:
-            simple_ltv = avg_mrr / churn_rate
+            simple_ltv = safe_divide(avg_mrr, churn_rate)
         else:
             simple_ltv = avg_mrr * periods
         
@@ -628,7 +629,7 @@ class RealisticCohortAnalyzer:
         return {
             'simple_ltv': simple_ltv,
             'discounted_ltv': discounted_ltv,
-            'customer_lifetime_months': 1/churn_rate if churn_rate > 0 else periods,
+            'customer_lifetime_months': safe_divide(1, churn_rate, periods) if churn_rate > 0 else periods,
             'formula_used': 'LTV = MRR / Churn Rate',
             'assumptions': {
                 'avg_mrr': avg_mrr,
@@ -686,7 +687,9 @@ class RealisticCohortAnalyzer:
         simulation_df = pd.DataFrame(simulation_data)
         
         # Добавляем расчеты LTV
-        simulation_df['ltv_to_date'] = simulation_df['cumulative_revenue'] / initial_customers
+        simulation_df['ltv_to_date'] = simulation_df['cumulative_revenue'].apply(
+            lambda value: safe_divide(value, initial_customers)
+        )
         
         return simulation_df
     

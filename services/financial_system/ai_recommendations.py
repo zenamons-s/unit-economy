@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 
+from services.utils.math_utils import safe_divide
+
 # Импорт GigaChat интеграции
 try:
     from gigachat_analyst import GigaChatAnalyst
@@ -373,14 +375,14 @@ class AIRecommendationEngine:
         if customers <= 0:
             return 0
         
-        avg_mrr_per_customer = mrr / customers
+        avg_mrr_per_customer = safe_divide(mrr, customers)
         
         # Оцениваем lifetime на основе churn
         churn_rate = self._estimate_churn_rate(financials, company_data)
         if churn_rate <= 0:
             lifetime = 12  # Default
         else:
-            lifetime = 1 / churn_rate
+            lifetime = safe_divide(1, churn_rate, 12)
         
         return avg_mrr_per_customer * lifetime
     
@@ -401,7 +403,7 @@ class AIRecommendationEngine:
         if avg_customers <= 0:
             return 0.05
         
-        monthly_churn = total_churned / 3 / avg_customers
+        monthly_churn = safe_divide(total_churned, 3 * avg_customers)
         return monthly_churn
     
     def _estimate_payback_period(self, company_data: Dict, 
@@ -413,13 +415,19 @@ class AIRecommendationEngine:
         
         latest = max(financials, key=lambda x: (x["year"], x["month_number"]))
         
-        cac = latest.get("actual_marketing_spend", 0) / latest.get("actual_new_customers", 1)
-        avg_mrr = latest.get("actual_mrr", 0) / company_data.get("current_customers", 1)
+        cac = safe_divide(
+            latest.get("actual_marketing_spend", 0),
+            latest.get("actual_new_customers", 1)
+        )
+        avg_mrr = safe_divide(
+            latest.get("actual_mrr", 0),
+            company_data.get("current_customers", 1)
+        )
         
         if avg_mrr <= 0:
             return 0
         
-        return cac / avg_mrr
+        return safe_divide(cac, avg_mrr)
     
     def _estimate_gross_margin(self, financial_data: Dict) -> float:
         """Оценка gross margin"""
@@ -554,7 +562,7 @@ class AIRecommendationEngine:
         if first <= 0:
             return 0
         
-        return (last - first) / first
+        return safe_divide(last - first, first)
     
     def _analyze_variances(self, company_id: int) -> Dict[str, Any]:
         """Анализ отклонений от плана"""

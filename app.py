@@ -445,23 +445,30 @@ class SAASDashboardApp:
         """Рендеринг основного контента"""
         
         current_tab = st.session_state.current_tab
-        
-        if current_tab == "🏠 Dashboard":
-            self.render_dashboard()
-        elif current_tab == "📈 Financial Planning":
-            self.render_financial_planning()
-        elif current_tab == "📊 Actual Tracking":
-            self.render_actual_tracking()
-        elif current_tab == "🔍 Variance Analysis":
-            self.render_variance_analysis()
-        elif current_tab == "🎯 Scenario Simulation":
-            self.render_scenario_simulation()
-        elif current_tab == "🤖 AI Analyst":
-            self.render_ai_analyst()
-        elif current_tab == "📋 Reports":
-            self.render_reports()
-        elif current_tab == "⚙️ Settings":
-            self.render_settings()
+
+        tab_renderers = {
+            "🏠 Dashboard": self.render_dashboard,
+            "📈 Financial Planning": self.render_financial_planning,
+            "📊 Actual Tracking": self.render_actual_tracking,
+            "🔍 Variance Analysis": self.render_variance_analysis,
+            "🎯 Scenario Simulation": self.render_scenario_simulation,
+            "🤖 AI Analyst": self.render_ai_analyst,
+            "📋 Reports": self.render_reports,
+            "⚙️ Settings": self.render_settings,
+        }
+
+        renderer = tab_renderers.get(current_tab)
+        if renderer:
+            self._render_with_error(renderer, current_tab)
+
+    def _render_with_error(self, render_func, tab_name: str) -> None:
+        """Безопасный рендер вкладки с перехватом ошибок."""
+        try:
+            render_func()
+        except Exception as exc:
+            logger.exception("Ошибка при рендеринге вкладки %s: %s", tab_name, exc)
+            st.error("Произошла ошибка при загрузке раздела.")
+            st.info("Проверьте вводимые данные или попробуйте обновить страницу.")
     
     def render_dashboard(self):
         """Рендеринг dashboard"""
