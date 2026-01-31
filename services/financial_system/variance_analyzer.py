@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 from scipy import stats
 
 from services.utils.math_utils import safe_divide
+from database.db_manager import db_manager
 
 @dataclass
 class VarianceAnalysis:
@@ -103,6 +104,110 @@ class VarianceAnalyzer:
             "dashboard": variance_dashboard,
             "key_insights": self._extract_key_insights(significant_variances, trend_analysis)
         }
+
+    def analyze_monthly_variance(self, company_id: int, month_number: int, year: int) -> Dict[str, Any]:
+        """Анализ отклонений за конкретный месяц."""
+        plan = db_manager.get_active_financial_plan(company_id)
+        if not plan:
+            return {"error": "Active plan not found"}
+
+        monthly_plan = db_manager.get_monthly_plan_by_month(plan.id, month_number, year)
+        if not monthly_plan:
+            return {"error": "Monthly plan not found"}
+
+        actuals = db_manager.get_actual_financials_by_filters(
+            {"company_id": company_id, "year": year, "month_number": month_number}
+        )
+        if not actuals:
+            return {"error": "Actual data not found"}
+
+        actual = max(
+            actuals,
+            key=lambda a: ((a.recorded_at or datetime.min), (a.id or 0)),
+        )
+        company = db_manager.get_company(company_id)
+        stage = company.stage if company else "pre_seed"
+
+        return self.analyze_variance(
+            [monthly_plan.to_dict()], [actual.to_dict()], stage
+        )
+
+    def analyze_quarterly_variance(self, company_id: int, quarter: int, year: int) -> Dict[str, Any]:
+        """Анализ отклонений за квартал."""
+        plan = db_manager.get_active_financial_plan(company_id)
+        if not plan:
+            return {"error": "Active plan not found"}
+
+        monthly_plans = db_manager.get_monthly_plans(plan.id)
+        quarter_months = {((quarter - 1) * 3) + 1, ((quarter - 1) * 3) + 2, ((quarter - 1) * 3) + 3}
+
+        planned = [
+            p for p in monthly_plans if p.year == year and p.month_number in quarter_months
+        ]
+        if not planned:
+            return {"error": "Monthly plans not found"}
+
+        actuals = db_manager.get_actual_financials_by_filters({"company_id": company_id, "year": year})
+        actuals = [a for a in actuals if a.month_number in quarter_months]
+        if not actuals:
+            return {"error": "Actual data not found"}
+
+        company = db_manager.get_company(company_id)
+        stage = company.stage if company else "pre_seed"
+
+        planned_dicts = [p.to_dict() for p in planned]
+        actual_dicts = [a.to_dict() for a in actuals]
+        return self.analyze_variance(planned_dicts, actual_dicts, stage)
+
+    def identify_problem_areas(self, company_id: int, last_n_months: int = 3) -> Dict[str, Any]:
+        """Определение проблемных зон на основе последних отклонений."""
+        plan = db_manager.get_active_financial_plan(company_id)
+        if not plan:
+            return {"problem_areas": []}
+
+        monthly_plans = db_manager.get_monthly_plans(plan.id)
+        actuals = db_manager.get_actual_financials_by_filters({"company_id": company_id})
+        if not monthly_plans or not actuals:
+            return {"problem_areas": []}
+
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=last_n_months * 30)
+
+        planned_recent = [
+            p for p in monthly_plans
+            if start_date <= datetime(p.year, p.month_number, 1) <= end_date
+        ]
+        actual_recent = [
+            a for a in actuals
+            if start_date <= datetime(a.year, a.month_number, 1) <= end_date
+        ]
+
+        if not planned_recent or not actual_recent:
+            return {"problem_areas": []}
+
+        company = db_manager.get_company(company_id)
+        stage = company.stage if company else "pre_seed"
+        analysis = self.analyze_variance(
+            [p.to_dict() for p in planned_recent],
+            [a.to_dict() for a in actual_recent],
+            stage,
+        )
+        significant = analysis.get("significant_variances", [])
+
+        problem_areas = []
+        for variance in significant:
+            significance = variance.get("significance", "medium")
+            severity = "high" if significance in {"critical", "high"} else "medium" if significance == "medium" else "low"
+            problem_areas.append({
+                "area": variance.get("metric", "unknown"),
+                "description": variance.get("impact_description", "Наблюдается отклонение от плана."),
+                "impact": variance.get("impact_description", ""),
+                "severity": severity,
+                "recommended_actions": variance.get("recommendations", []),
+                "resolution_timeline": "30 days",
+            })
+
+        return {"problem_areas": problem_areas}
     
     def _align_data(self, planned_data: List[Dict], actual_data: List[Dict]) -> List[Dict]:
         """Выравнивание плановых и фактических данных по месяцам"""
@@ -1090,14 +1195,27 @@ def analyze_plan_variance(company_id: int, plan_id: int,
     if not plan or not monthly_plans:
         return {"error": "Plan not found"}
     
-    # Получаем фактические данные
-    actual_data = db_manager.get_actual_financials(
-        company_id, 
-        start_date or plan.created_at,
-        end_date or datetime.now().isoformat()
-    )
+    actual_data = db_manager.get_actual_financials_by_filters({"company_id": company_id})
+
+    if start_date or end_date:
+        if isinstance(start_date, datetime):
+            start = start_date
+        elif start_date:
+            start = datetime.fromisoformat(start_date)
+        else:
+            start = datetime.min
+
+        if isinstance(end_date, datetime):
+            end = end_date
+        elif end_date:
+            end = datetime.fromisoformat(end_date)
+        else:
+            end = datetime.max
+        actual_data = [
+            a for a in actual_data
+            if start <= datetime(a.year, a.month_number, 1) <= end
+        ]
     
-    # Конвертируем в dict
     planned_dicts = [p.to_dict() for p in monthly_plans]
     actual_dicts = [a.to_dict() for a in actual_data]
     
@@ -1110,13 +1228,14 @@ def analyze_plan_variance(company_id: int, plan_id: int,
 def get_variance_alerts(company_id: int, last_n_months: int = 3) -> List[Dict[str, Any]]:
     """Получение variance alerts за последние N месяцев"""
     
-    # Получаем последние фактические данные
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=last_n_months*30)
-    
-    actual_data = db_manager.get_actual_financials(
-        company_id, start_date.isoformat(), end_date.isoformat()
-    )
+    start_date = end_date - timedelta(days=last_n_months * 30)
+
+    actual_data = db_manager.get_actual_financials_by_filters({"company_id": company_id})
+    actual_data = [
+        a for a in actual_data
+        if start_date <= datetime(a.year, a.month_number, 1) <= end_date
+    ]
     
     if not actual_data:
         return []
@@ -1124,19 +1243,20 @@ def get_variance_alerts(company_id: int, last_n_months: int = 3) -> List[Dict[st
     # Находим соответствующие планы
     alerts = []
     
+    plan = db_manager.get_active_financial_plan(company_id)
+    if not plan:
+        return []
+
     for actual in actual_data:
-        # Ищем соответствующий месячный план
-        month_plan = db_manager.get_monthly_plan_by_period(
-            company_id, actual.year, actual.month_number
+        month_plan = db_manager.get_monthly_plan_by_month(
+            plan.id, actual.month_number, actual.year
         )
-        
+
         if month_plan:
-            # Анализируем variance
             variance_analysis = variance_analyzer.analyze_variance(
                 [month_plan.to_dict()], [actual.to_dict()], "pre_seed"
             )
-            
-            # Извлекаем alerts
+
             if "dashboard" in variance_analysis:
                 alerts.extend(variance_analysis["dashboard"].get("alerts", []))
     

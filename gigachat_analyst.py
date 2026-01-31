@@ -759,7 +759,7 @@ class GigaChatAnalyst:
                         language: str) -> str:
         # Безопасная сериализация контекста
         safe_context = self._safe_json_serialize(context)
-        
+
         # Добавление контекста
         try:
             context_str = json.dumps(safe_context, indent=2, ensure_ascii=False)
@@ -769,10 +769,10 @@ class GigaChatAnalyst:
             context_str = json.dumps({
                 "company_name": context.get("company", {}).get("company_name", "Unknown"),
                 "analysis_type": analysis_type.value,
-                "metrics": context.get("metrics", {}),
-                "data_summary": context.get("data_summary", {})
+                "metrics": safe_context.get("metrics", {}),
+                "data_summary": safe_context.get("data_summary", {})
             }, indent=2, ensure_ascii=False)
-            
+
         """Генерация промпта для GigaChat"""
         
         # Базовый промпт
@@ -818,9 +818,6 @@ Your task is to analyze company data and provide useful insights.
         }
         
         analysis_prompt = analysis_prompts.get(analysis_type, {"ru": "", "en": ""})[language]
-        
-        # Добавление контекста
-        context_str = json.dumps(context, indent=2, ensure_ascii=False)
         
         # Добавление custom query если есть
         custom_query_part = ""

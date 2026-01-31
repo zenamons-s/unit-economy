@@ -1332,6 +1332,10 @@ class SAASDashboardApp:
         """Рендеринг вкладки рекомендаций"""
         
         st.markdown("#### 🎯 Рекомендации для улучшения")
+
+        if not company:
+            st.error("Компания не найдена. Добавьте данные компании, чтобы получить рекомендации.")
+            return
         
         # Получение рекомендаций от AI
         with st.spinner("Генерация рекомендаций..."):
@@ -2796,6 +2800,10 @@ class SAASDashboardApp:
         
         company_id = st.session_state.company_id
         company = db_manager.get_company(company_id)
+
+        if not company:
+            st.error("Компания не найдена. Добавьте данные компании, чтобы открыть анализ отклонений.")
+            return
         
         st.markdown(f'<h2 class="sub-header">🔍 Variance Analysis: {company.name}</h2>', unsafe_allow_html=True)
         
@@ -2846,11 +2854,23 @@ class SAASDashboardApp:
         
         if st.button("Анализировать отклонения", type="primary"):
             # Анализ отклонений
-            variance_data = variance_analyzer.analyze_monthly_variance(
-                company.id, month, year
-            )
-            
-            if variance_data and "variance_summary" in variance_data:
+            try:
+                variance_data = variance_analyzer.analyze_monthly_variance(
+                    company.id, month, year
+                )
+            except Exception as exc:
+                st.error(f"Ошибка анализа отклонений: {exc}")
+                return
+
+            if not isinstance(variance_data, dict):
+                st.warning("Неверный формат данных анализа.")
+                return
+
+            if "error" in variance_data:
+                st.warning(variance_data["error"])
+                return
+
+            if "variance_summary" in variance_data:
                 self._display_variance_results(variance_data)
             else:
                 st.info("Нет данных для анализа отклонений за выбранный период")
@@ -2886,11 +2906,23 @@ class SAASDashboardApp:
         
         if st.button("Анализировать квартальные отклонения", type="primary"):
             # Анализ отклонений
-            variance_data = variance_analyzer.analyze_quarterly_variance(
-                company.id, quarter, year
-            )
-            
-            if variance_data and "variance_summary" in variance_data:
+            try:
+                variance_data = variance_analyzer.analyze_quarterly_variance(
+                    company.id, quarter, year
+                )
+            except Exception as exc:
+                st.error(f"Ошибка анализа отклонений: {exc}")
+                return
+
+            if not isinstance(variance_data, dict):
+                st.warning("Неверный формат данных анализа.")
+                return
+
+            if "error" in variance_data:
+                st.warning(variance_data["error"])
+                return
+
+            if "variance_summary" in variance_data:
                 self._display_variance_results(variance_data)
             else:
                 st.info("Нет данных для анализа квартальных отклонений")
@@ -3073,6 +3105,10 @@ class SAASDashboardApp:
             # Используем variance analyzer для выявления проблем
             problem_areas = variance_analyzer.identify_problem_areas(company.id)
             
+            if not isinstance(problem_areas, dict):
+                st.warning("Неверный формат данных проблемных зон.")
+                return
+
             if problem_areas and "problem_areas" in problem_areas:
                 problems = problem_areas["problem_areas"]
                 
@@ -3841,6 +3877,10 @@ class SAASDashboardApp:
         
         company_id = st.session_state.company_id
         company = db_manager.get_company(company_id)
+
+        if not company:
+            st.error("Компания не найдена. Добавьте данные компании, чтобы сформировать отчет.")
+            return
         
         st.markdown(f'<h2 class="sub-header">📋 Reports: {company.name}</h2>', unsafe_allow_html=True)
         
