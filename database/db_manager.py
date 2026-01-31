@@ -1227,30 +1227,27 @@ class DatabaseManager:
                     
                 else:
                     # Создаем новые данные
-                    cursor.execute('''
-                        INSERT INTO actual_data (
-                            monthly_plan_id, company_id, year, month_number,
-                            actual_mrr, actual_new_customers, actual_expansion_mrr,
-                            actual_churn_rate, actual_churned_mrr,
-                            actual_marketing_spent, actual_sales_spent, actual_cac,
-                            actual_salaries, actual_office_rent, actual_cloud_services,
-                            actual_software_subscriptions, actual_legal_accounting,
-                            actual_marketing_ops, actual_other_opex,
-                            actual_capex_spent, actual_capex_equipment,
-                            actual_capex_software, actual_capex_furniture, actual_capex_other,
-                            actual_total_revenue, actual_total_costs, actual_burn_rate,
-                            actual_gross_margin, actual_runway, actual_ltv_cac_ratio,
-                            actual_cac_payback_months,
-                            variance_mrr, variance_burn_rate, variance_runway,
-                            variance_cac, variance_new_customers,
-                            actual_churned_customers, actual_total_customers,
-                            actual_cash_balance, actual_ltv,
-                            data_source, import_file, notes,
-                            is_finalized, is_verified, recorded_by, recorded_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-                                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-                                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
+                    columns = [
+                        "monthly_plan_id", "company_id", "year", "month_number",
+                        "actual_mrr", "actual_new_customers", "actual_expansion_mrr",
+                        "actual_churn_rate", "actual_churned_mrr",
+                        "actual_marketing_spent", "actual_sales_spent", "actual_cac",
+                        "actual_salaries", "actual_office_rent", "actual_cloud_services",
+                        "actual_software_subscriptions", "actual_legal_accounting",
+                        "actual_marketing_ops", "actual_other_opex",
+                        "actual_capex_spent", "actual_capex_equipment",
+                        "actual_capex_software", "actual_capex_furniture", "actual_capex_other",
+                        "actual_total_revenue", "actual_total_costs", "actual_burn_rate",
+                        "actual_gross_margin", "actual_runway", "actual_ltv_cac_ratio",
+                        "actual_cac_payback_months",
+                        "variance_mrr", "variance_burn_rate", "variance_runway",
+                        "variance_cac", "variance_new_customers",
+                        "actual_churned_customers", "actual_total_customers",
+                        "actual_cash_balance", "actual_ltv",
+                        "data_source", "import_file", "notes",
+                        "is_finalized", "is_verified", "recorded_by", "recorded_at",
+                    ]
+                    values = [
                         data.monthly_plan_id, data.company_id, data.year, data.month_number,
                         data.actual_mrr, data.actual_new_customers, data.actual_expansion_mrr,
                         data.actual_churn_rate, data.actual_churned_mrr,
@@ -1269,8 +1266,13 @@ class DatabaseManager:
                         data.actual_cash_balance, data.actual_ltv,
                         data.data_source, data.import_file, data.notes,
                         data.is_finalized, data.is_verified, data.recorded_by,
-                        recorded_at.isoformat()
-                    ))
+                        recorded_at.isoformat(),
+                    ]
+                    placeholders = ", ".join(["?"] * len(columns))
+                    cursor.execute(
+                        f"INSERT INTO actual_data ({', '.join(columns)}) VALUES ({placeholders})",
+                        values,
+                    )
                     
                     actual_id = cursor.lastrowid
                     logger.info(f"Созданы фактические данные ID: {actual_id}")
