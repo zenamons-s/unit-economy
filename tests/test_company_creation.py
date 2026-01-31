@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from database.db_manager import Company, db_manager
@@ -10,17 +12,32 @@ def _setup_db(tmp_path):
     return db_path
 
 
-def test_create_company_persists_and_listed(tmp_path):
-    _setup_db(tmp_path)
+def test_create_company_persists(tmp_path):
+    db_path = _setup_db(tmp_path)
 
     company_id = db_manager.create_company(Company(name="PersistCo"))
-    companies = db_manager.get_all_companies()
 
     assert company_id is not None
-    assert any(company.name == "PersistCo" for company in companies)
+
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, name FROM companies WHERE id = ?", (company_id,)
+        ).fetchone()
+
+    assert row is not None
+    assert row[1] == "PersistCo"
 
 
-def test_company_not_deleted_on_reinitialize(tmp_path):
+def test_company_list_includes_new_company(tmp_path):
+    _setup_db(tmp_path)
+
+    db_manager.create_company(Company(name="ListedCo"))
+    companies = db_manager.get_all_companies()
+
+    assert any(company.name == "ListedCo" for company in companies)
+
+
+def test_initialize_does_not_delete_companies(tmp_path):
     _setup_db(tmp_path)
 
     company_id = db_manager.create_company(Company(name="StayCo"))
@@ -31,7 +48,7 @@ def test_company_not_deleted_on_reinitialize(tmp_path):
     assert company.name == "StayCo"
 
 
-def test_create_company_handles_duplicate_name(tmp_path):
+def test_duplicate_name_user_friendly_error(tmp_path):
     _setup_db(tmp_path)
 
     db_manager.create_company(Company(name="DuplicateCo"))

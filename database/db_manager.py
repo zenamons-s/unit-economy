@@ -664,14 +664,23 @@ class DatabaseManager:
     
     def create_company(self, company: Company) -> int:
         """Создание новой компании"""
-        name = (company.name or "").strip()
-        if not name:
-            raise ValueError("Название компании обязательно для создания.")
-
-        if self.get_company_by_name(name) is not None:
-            raise ValueError(f"Компания с названием '{name}' уже существует.")
-
         try:
+            name = (company.name or "").strip()
+            if not name:
+                raise ValueError("Название компании обязательно для создания.")
+
+            if self.get_company_by_name(name) is not None:
+                raise ValueError(f"Компания с названием '{name}' уже существует.")
+
+            logger.info(
+                "Попытка создания компании: name=%s stage=%s mrr=%s customers=%s price=%s team=%s",
+                name,
+                company.stage,
+                company.current_mrr,
+                company.current_customers,
+                company.monthly_price,
+                company.team_size,
+            )
             with self.get_connection() as conn:
                 cursor = conn.cursor()
 
@@ -709,12 +718,16 @@ class DatabaseManager:
                 )
 
                 company_id = cursor.lastrowid
+                logger.info("Компания вставлена в БД, lastrowid=%s", company_id)
                 conn.commit()
-                logger.info(f"Создана компания: {name} (ID: {company_id})")
+                if not company_id:
+                    raise RuntimeError("Не удалось получить ID созданной компании.")
+                logger.info("Создана компания: %s (ID: %s)", name, company_id)
+                logger.info("Создание компании подтверждено коммитом (ID: %s)", company_id)
                 return company_id
 
         except sqlite3.IntegrityError as e:
-            logger.error(f"Ошибка целостности при создании компании: {e}")
+            logger.exception("Ошибка целостности при создании компании: %s", e)
             message = str(e).lower()
             if "unique" in message:
                 raise ValueError(f"Компания с названием '{name}' уже существует.") from e
@@ -722,7 +735,10 @@ class DatabaseManager:
                 raise ValueError("Не заполнены обязательные поля компании.") from e
             raise
         except sqlite3.Error as e:
-            logger.error(f"Ошибка создания компании: {e}")
+            logger.exception("Ошибка создания компании: %s", e)
+            raise
+        except Exception as e:
+            logger.exception("Неожиданная ошибка при создании компании: %s", e)
             raise
     
     def get_company(self, company_id: int) -> Optional[Company]:
@@ -780,13 +796,13 @@ class DatabaseManager:
                 cursor = conn.cursor()
                 cursor.execute('SELECT * FROM companies WHERE is_active = 1 ORDER BY name')
                 
-                companies = []
-                for row in cursor.fetchall():
-                    companies.append(self._row_to_company(row))
+                rows = cursor.fetchall()
+                companies = [self._row_to_company(row) for row in rows]
+                logger.info("Получено компаний из БД: %s", len(companies))
                 return companies
                 
         except sqlite3.Error as e:
-            logger.error(f"Ошибка получения всех компаний: {e}")
+            logger.exception("Ошибка получения всех компаний: %s", e)
             return []
     
     def update_company(self, company: Company) -> bool:
