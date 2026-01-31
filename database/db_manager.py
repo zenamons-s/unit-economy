@@ -664,34 +664,63 @@ class DatabaseManager:
     
     def create_company(self, company: Company) -> int:
         """Создание новой компании"""
+        name = (company.name or "").strip()
+        if not name:
+            raise ValueError("Название компании обязательно для создания.")
+
+        if self.get_company_by_name(name) is not None:
+            raise ValueError(f"Компания с названием '{name}' уже существует.")
+
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                
+
                 created_at = company.created_at or datetime.now()
                 updated_at = company.updated_at or datetime.now()
-                
-                cursor.execute('''
+
+                cursor.execute(
+                    '''
                     INSERT INTO companies (
                         user_id, name, description, stage, industry, country,
                         currency, current_mrr, current_customers, monthly_price,
                         team_size, cash_balance, fiscal_year_start,
                         reporting_currency, created_at, updated_at, is_active
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    company.user_id, company.name, company.description,
-                    company.stage, company.industry, company.country,
-                    company.currency, company.current_mrr, company.current_customers,
-                    company.monthly_price, company.team_size, company.cash_balance,
-                    company.fiscal_year_start, company.reporting_currency,
-                    created_at.isoformat(), updated_at.isoformat(), company.is_active
-                ))
-                
+                    ''',
+                    (
+                        company.user_id,
+                        name,
+                        company.description,
+                        company.stage,
+                        company.industry,
+                        company.country,
+                        company.currency,
+                        company.current_mrr,
+                        company.current_customers,
+                        company.monthly_price,
+                        company.team_size,
+                        company.cash_balance,
+                        company.fiscal_year_start,
+                        company.reporting_currency,
+                        created_at.isoformat(),
+                        updated_at.isoformat(),
+                        company.is_active,
+                    ),
+                )
+
                 company_id = cursor.lastrowid
                 conn.commit()
-                logger.info(f"Создана компания: {company.name} (ID: {company_id})")
+                logger.info(f"Создана компания: {name} (ID: {company_id})")
                 return company_id
-                
+
+        except sqlite3.IntegrityError as e:
+            logger.error(f"Ошибка целостности при создании компании: {e}")
+            message = str(e).lower()
+            if "unique" in message:
+                raise ValueError(f"Компания с названием '{name}' уже существует.") from e
+            if "not null" in message:
+                raise ValueError("Не заполнены обязательные поля компании.") from e
+            raise
         except sqlite3.Error as e:
             logger.error(f"Ошибка создания компании: {e}")
             raise
@@ -710,6 +739,22 @@ class DatabaseManager:
                 
         except sqlite3.Error as e:
             logger.error(f"Ошибка получения компании: {e}")
+            return None
+
+    def get_company_by_name(self, name: str) -> Optional[Company]:
+        """Получение компании по названию"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT * FROM companies WHERE name = ?', (name,))
+                row = cursor.fetchone()
+
+                if row:
+                    return self._row_to_company(row)
+                return None
+
+        except sqlite3.Error as e:
+            logger.error(f"Ошибка получения компании по имени: {e}")
             return None
     
     def get_company_by_user(self, user_id: int) -> Optional[Company]:

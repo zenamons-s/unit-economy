@@ -418,7 +418,9 @@ class SAASDashboardApp:
                         st.rerun()
                     else:
                         st.error("❌ Ошибка: Не удалось создать компанию")
-                        
+
+                except ValueError as e:
+                    st.error(f"❌ Ошибка при создании компании: {e}")
                 except Exception as e:
                     st.error(f"❌ Ошибка при создании компании: {str(e)}")
                     import traceback
