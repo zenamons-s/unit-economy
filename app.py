@@ -86,17 +86,21 @@ st.set_page_config(
 )
 
 # Инициализация базы данных
-logger.info("Инициализация базы данных...")
-try:
-    db_manager.initialize_database()
-    logger.info("База данных инициализирована успешно")
-    
-    # Проверяем, что таблицы созданы
-    time.sleep(1)
-    
-except Exception as e:
-    logger.error(f"Ошибка инициализации БД: {e}")
-    st.error(f"Ошибка инициализации базы данных: {e}")
+@st.cache_resource(show_spinner=False)
+def initialize_database():
+    logger.info("Инициализация базы данных...")
+    try:
+        db_manager.initialize_database()
+        logger.info("База данных инициализирована успешно")
+
+        # Проверяем, что таблицы созданы
+        time.sleep(1)
+    except Exception as e:
+        logger.error(f"Ошибка инициализации БД: {e}")
+        st.error(f"Ошибка инициализации базы данных: {e}")
+
+
+initialize_database()
 
 # Настройка стилей
 st.markdown("""
@@ -1350,7 +1354,12 @@ class SAASDashboardApp:
         stage_recommendations = []
         
         if company.stage == "pre_seed":
-            stage_recommendations = pre_seed_advisor.analyze_company(company.id)
+            try:
+                stage_recommendations = pre_seed_advisor.analyze_company(company.id)
+            except Exception as e:
+                st.error("Рекомендации по стадии временно недоступны из-за ошибки анализа.")
+                st.info(f"Детали ошибки: {e}")
+                return
         else:
             # Общие рекомендации для других стадий
             stage_recommendations = [
