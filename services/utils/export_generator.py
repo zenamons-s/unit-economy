@@ -40,6 +40,14 @@ class ExportGenerator:
     def __init__(self):
         self.styles = getSampleStyleSheet()
         self.setup_custom_styles()
+
+    def _ensure_parent_dir(self, filename: Optional[str]) -> None:
+        """Создает директорию для файла экспорта если нужно."""
+        if not filename:
+            return
+        path = Path(filename)
+        if path.parent and str(path.parent) != ".":
+            path.parent.mkdir(parents=True, exist_ok=True)
     
     def setup_custom_styles(self):
         """Настройка кастомных стилей для PDF"""
@@ -156,6 +164,7 @@ class ExportGenerator:
         
         # Сохраняем в файл если указано имя
         if filename:
+            self._ensure_parent_dir(filename)
             with open(filename, 'wb') as f:
                 f.write(excel_data)
         
@@ -282,6 +291,7 @@ class ExportGenerator:
         
         # Сохраняем в файл если указано имя
         if filename:
+            self._ensure_parent_dir(filename)
             with open(filename, 'w', newline='', encoding='utf-8') as f:
                 f.write(csv_data)
         
@@ -307,6 +317,7 @@ class ExportGenerator:
         
         # Сохраняем в файл если указано имя
         if filename:
+            self._ensure_parent_dir(filename)
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(json_data)
         
@@ -321,6 +332,7 @@ class ExportGenerator:
         buffer = io.BytesIO()
         
         if filename:
+            self._ensure_parent_dir(filename)
             doc = SimpleDocTemplate(filename, pagesize=A4)
         else:
             doc = SimpleDocTemplate(buffer, pagesize=A4)
@@ -730,6 +742,7 @@ class ExportGenerator:
         
         # Сохраняем в файл если указано имя
         if filename:
+            self._ensure_parent_dir(filename)
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(html_content)
         
@@ -842,6 +855,7 @@ class ExportGenerator:
         
         # Сохраняем в файл если указано имя
         if filename:
+            self._ensure_parent_dir(filename)
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(md_content)
         
@@ -962,6 +976,7 @@ class ExportGenerator:
         
         # Сохраняем в файл если указано имя
         if filename:
+            self._ensure_parent_dir(filename)
             with open(filename, 'wb') as f:
                 f.write(excel_data)
         
@@ -974,6 +989,7 @@ class ExportGenerator:
         buffer = io.BytesIO()
         
         if filename:
+            self._ensure_parent_dir(filename)
             doc = SimpleDocTemplate(filename, pagesize=A4)
         else:
             doc = SimpleDocTemplate(buffer, pagesize=A4)
@@ -1128,6 +1144,7 @@ class ExportGenerator:
             excel_data = output.getvalue()
             
             if filename:
+                self._ensure_parent_dir(filename)
                 with open(filename, 'wb') as f:
                     f.write(excel_data)
             return excel_data
@@ -1136,6 +1153,7 @@ class ExportGenerator:
             csv_data = df.to_csv(index=False)
             
             if filename:
+                self._ensure_parent_dir(filename)
                 with open(filename, 'w', newline='', encoding='utf-8') as f:
                     f.write(csv_data)
             return csv_data
@@ -1144,6 +1162,7 @@ class ExportGenerator:
             json_data = df.to_json(orient='records', indent=2)
             
             if filename:
+                self._ensure_parent_dir(filename)
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write(json_data)
             return json_data
@@ -1173,6 +1192,7 @@ class ExportGenerator:
             """
             
             if filename:
+                self._ensure_parent_dir(filename)
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write(full_html)
             return full_html

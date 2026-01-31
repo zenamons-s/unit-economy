@@ -1031,7 +1031,7 @@ class InvestorReportGenerator:
         return {
             "success": True,
             "report": investment_memo,
-            "export_formats": ["pdf", "docx"],
+            "export_formats": ["pdf"],
             "estimated_pages": 20
         }
     

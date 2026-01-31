@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 import plotly.graph_objects as go
 from enum import Enum
 
+from services.utils.math_utils import safe_divide
+
 class ScenarioType(Enum):
     """Типы сценариев"""
     GROWTH_ACCELERATION = "growth_acceleration"
@@ -464,7 +466,7 @@ class ScenarioSimulator:
             curr_value = monthly_results[i][metric]
             
             if prev_value > 0:
-                growth_rate = (curr_value - prev_value) / prev_value
+                growth_rate = safe_divide(curr_value - prev_value, prev_value)
                 growth_rates.append(growth_rate)
         
         return np.mean(growth_rates) if growth_rates else 0
@@ -519,7 +521,7 @@ class ScenarioSimulator:
                 base_value = base_metrics[base_key]
                 
                 if base_value != 0:
-                    change_percent = (scenario_value - base_value) / base_value * 100
+                    change_percent = safe_divide(scenario_value - base_value, base_value) * 100
                 else:
                     change_percent = 100 if scenario_value > 0 else 0
                 
@@ -547,7 +549,7 @@ class ScenarioSimulator:
                 "base": base_growth,
                 "scenario": scenario_growth,
                 "absolute_change": scenario_growth - base_growth,
-                "percent_change": ((scenario_growth - base_growth) / base_growth * 100) if base_growth != 0 else 0
+                "percent_change": safe_divide(scenario_growth - base_growth, base_growth) * 100 if base_growth != 0 else 0
             }
         
         # Сравнение runway
@@ -560,7 +562,7 @@ class ScenarioSimulator:
                 "base": base_runway,
                 "scenario": scenario_runway,
                 "months_change": runway_change,
-                "percent_change": (runway_change / base_runway * 100) if base_runway != 0 else 0
+                "percent_change": safe_divide(runway_change, base_runway) * 100 if base_runway != 0 else 0
             }
             
             if abs(runway_change) > 3:  # Изменение на 3+ месяца значительное
@@ -834,7 +836,7 @@ class ScenarioSimulator:
         
         for i in range(1, len(mrr_values)):
             if mrr_values[i-1] > 0:
-                growth_rate = (mrr_values[i] - mrr_values[i-1]) / mrr_values[i-1]
+                growth_rate = safe_divide(mrr_values[i] - mrr_values[i-1], mrr_values[i-1])
                 growth_rates.append(growth_rate)
         
         if not growth_rates:
@@ -1486,7 +1488,7 @@ class ScenarioSimulator:
         summary["risk_assessment"] = {
             "high_risk_scenarios": high_risk_scenarios,
             "total_high_risk_scenarios": len(high_risk_scenarios),
-            "percentage_high_risk": (len(high_risk_scenarios) / len(successful_scenarios)) * 100
+            "percentage_high_risk": safe_divide(len(high_risk_scenarios), len(successful_scenarios)) * 100
         }
         
         return summary
