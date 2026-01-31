@@ -86,17 +86,21 @@ st.set_page_config(
 )
 
 # Инициализация базы данных
-logger.info("Инициализация базы данных...")
-try:
-    db_manager.initialize_database()
-    logger.info("База данных инициализирована успешно")
-    
-    # Проверяем, что таблицы созданы
-    time.sleep(1)
-    
-except Exception as e:
-    logger.error(f"Ошибка инициализации БД: {e}")
-    st.error(f"Ошибка инициализации базы данных: {e}")
+@st.cache_resource(show_spinner=False)
+def initialize_database():
+    logger.info("Инициализация базы данных...")
+    try:
+        db_manager.initialize_database()
+        logger.info("База данных инициализирована успешно")
+
+        # Проверяем, что таблицы созданы
+        time.sleep(1)
+    except Exception as e:
+        logger.error(f"Ошибка инициализации БД: {e}")
+        st.error(f"Ошибка инициализации базы данных: {e}")
+
+
+initialize_database()
 
 # Настройка стилей
 st.markdown("""
@@ -1348,9 +1352,18 @@ class SAASDashboardApp:
         
         # Рекомендации по стадии компании
         stage_recommendations = []
-        
+        stage_analysis = None
+
         if company.stage == "pre_seed":
-            stage_recommendations = pre_seed_advisor.analyze_company(company.id)
+            try:
+                stage_analysis = pre_seed_advisor.analyze_company(company.id)
+                stage_recommendations = self._normalize_recommendations(stage_analysis)
+                if isinstance(stage_analysis, dict) and stage_analysis.get("notes"):
+                    st.info(f"Детали анализа: {stage_analysis['notes']}")
+            except Exception as e:
+                st.error("Рекомендации по стадии временно недоступны из-за ошибки анализа.")
+                st.info(f"Детали ошибки: {e}")
+                stage_recommendations = []
         else:
             # Общие рекомендации для других стадий
             stage_recommendations = [
@@ -1423,6 +1436,21 @@ class SAASDashboardApp:
                                     st.markdown(f"- {metric}: {target}")
         except Exception as e:
             st.info("Годовая roadmap временно недоступна")
+
+    def _normalize_recommendations(self, raw_recommendations):
+        """Нормализация рекомендаций к списку для безопасного отображения."""
+        if raw_recommendations is None:
+            return []
+        if isinstance(raw_recommendations, dict):
+            recommendations = raw_recommendations.get("recommendations", [])
+            if isinstance(recommendations, list):
+                return recommendations
+            st.warning("Неверный формат рекомендаций по стадии: ожидался список.")
+            return []
+        if isinstance(raw_recommendations, list):
+            return raw_recommendations
+        st.warning("Неверный формат рекомендаций по стадии: ожидался список или словарь.")
+        return []
     
     def render_financial_planning(self):
         """Рендеринг финансового планирования"""
