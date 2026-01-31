@@ -4,10 +4,15 @@
 """
 
 import json
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
+import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+
+from database.db_manager import db_manager
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class PreSeedChallenge:
@@ -31,6 +36,34 @@ class PreSeedAdvisor:
         self.challenges = self._load_challenges()
         self.patterns = self._load_success_patterns()
         self.common_mistakes = self._load_common_mistakes()
+
+    def get_company_data(self, company_id: int) -> Dict[str, Any]:
+        """Получение данных компании из базы данных по ID."""
+        return self._load_company_data(company_id)
+
+    def _resolve_company_data(
+        self, company_data: Union[int, Mapping[str, Any]]
+    ) -> Dict[str, Any]:
+        """Приведение входных данных к словарю с данными компании."""
+        if isinstance(company_data, int):
+            return self._load_company_data(company_data)
+        if isinstance(company_data, Mapping):
+            return dict(company_data)
+        logger.warning("Неожиданный тип company_data: %s", type(company_data))
+        return {"name": "Unnamed Company", "stage": "pre_seed"}
+
+    def _load_company_data(self, company_id: int) -> Dict[str, Any]:
+        """Загрузка данных компании из БД и нормализация."""
+        company = db_manager.get_company(company_id)
+        if not company:
+            logger.warning("Компания с id=%s не найдена.", company_id)
+            return {"id": company_id, "name": "Unnamed Company", "stage": "pre_seed"}
+        company_dict = company.to_dict()
+        if not company_dict.get("name"):
+            company_dict["name"] = "Unnamed Company"
+        if not company_dict.get("stage"):
+            company_dict["stage"] = "pre_seed"
+        return company_dict
     
     def _load_challenges(self) -> List[PreSeedChallenge]:
         """Загрузка типичных вызовов для Pre-Seed"""
@@ -317,9 +350,11 @@ class PreSeedAdvisor:
             }
         ]
     
-    def analyze_company(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_company(self, company_data: Union[int, Mapping[str, Any]]) -> Dict[str, Any]:
         """Анализ компании и выявление проблем"""
-        
+
+        company_data = self._resolve_company_data(company_data)
+
         analysis = {
             "company_name": company_data.get("name", "Unnamed Company"),
             "stage": company_data.get("stage", "pre_seed"),
