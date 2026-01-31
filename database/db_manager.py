@@ -232,8 +232,12 @@ class DatabaseManager:
     def get_connection(self) -> sqlite3.Connection:
         """Получение соединения с базой данных"""
         try:
-            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-            conn = sqlite3.connect(self.db_path)
+            db_path = Path(self.db_path).resolve()
+            self.db_path = db_path
+            db_exists = db_path.exists()
+            logger.info("DB connection: path=%s exists=%s", db_path, db_exists)
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(db_path)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("PRAGMA journal_mode = WAL")
@@ -687,15 +691,19 @@ class DatabaseManager:
                 created_at = company.created_at or datetime.now()
                 updated_at = company.updated_at or datetime.now()
 
-                cursor.execute(
-                    '''
+                insert_sql = (
+                    """
                     INSERT INTO companies (
                         user_id, name, description, stage, industry, country,
                         currency, current_mrr, current_customers, monthly_price,
                         team_size, cash_balance, fiscal_year_start,
                         reporting_currency, created_at, updated_at, is_active
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''',
+                    """
+                )
+                logger.info("SQL create_company: %s", insert_sql.strip())
+                cursor.execute(
+                    insert_sql,
                     (
                         company.user_id,
                         name,
@@ -720,6 +728,7 @@ class DatabaseManager:
                 company_id = cursor.lastrowid
                 logger.info("Компания вставлена в БД, lastrowid=%s", company_id)
                 conn.commit()
+                logger.info("Коммит выполнен для компании: %s", company_id)
                 if not company_id:
                     raise RuntimeError("Не удалось получить ID созданной компании.")
                 logger.info("Создана компания: %s (ID: %s)", name, company_id)
@@ -794,6 +803,7 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
+                logger.info("Запрос компаний из БД: path=%s", Path(self.db_path).resolve())
                 cursor.execute('SELECT * FROM companies WHERE is_active = 1 ORDER BY name')
                 
                 rows = cursor.fetchall()
