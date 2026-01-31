@@ -1619,6 +1619,8 @@ class SAASDashboardApp:
                     
                     # Сохранение месячных планов
                     for monthly_plan in monthly_plans:
+                        if isinstance(monthly_plan, dict):
+                            monthly_plan = MonthlyPlan(**monthly_plan)
                         db_manager.create_monthly_plan(monthly_plan)
                     
                     st.success(f"Финансовый план '{plan_name}' успешно создан!")

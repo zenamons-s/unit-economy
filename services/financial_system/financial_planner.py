@@ -149,6 +149,117 @@ class FinancialPlanner:
             "benchmarks_used": benchmarks.metrics if benchmarks else {},
             "assumptions": self._extract_assumptions(inputs, base_plan)
         }
+
+    def generate_monthly_plans(self, plan_id: int, assumptions: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Генерация 12-месячного плана для обратной совместимости с UI.
+
+        Args:
+            plan_id: ID финансового плана в базе
+            assumptions: словарь с допущениями по росту и затратам
+
+        Returns:
+            Список из 12 словарей с месячными планами (без datetime объектов)
+        """
+
+        growth = assumptions.get("growth", {})
+        costs = assumptions.get("costs", {})
+
+        monthly_growth_rate = float(growth.get("monthly_growth_rate", 0))
+        monthly_churn_rate = float(growth.get("monthly_churn_rate", 0))
+        starting_mrr = float(growth.get("starting_mrr", 0))
+        starting_customers = int(growth.get("starting_customers", 0))
+        starting_cash = float(growth.get("starting_cash", 0))
+
+        salary_cost = float(costs.get("salary_cost", 0))
+        marketing_cost = float(costs.get("marketing_cost", 0))
+        infrastructure_cost = float(costs.get("infrastructure_cost", 0))
+        other_cost = float(costs.get("other_cost", 0))
+        cac = float(costs.get("cac", 0))
+
+        plan = db_manager.get_financial_plan(plan_id)
+        plan_year = plan.plan_year if plan else datetime.now().year
+
+        current_mrr = starting_mrr
+        current_customers = starting_customers
+        cash_balance = starting_cash
+
+        monthly_plans: List[Dict[str, Any]] = []
+
+        for month in range(1, 13):
+            churned_customers = int(current_customers * monthly_churn_rate)
+            customers_after_churn = max(0, current_customers - churned_customers)
+            target_customers = int(round(customers_after_churn * (1 + monthly_growth_rate)))
+            new_customers = max(0, target_customers - customers_after_churn)
+            total_customers = customers_after_churn + new_customers
+
+            plan_mrr = max(0.0, current_mrr * (1 + monthly_growth_rate - monthly_churn_rate))
+            plan_churned_mrr = current_mrr * monthly_churn_rate
+
+            total_costs = salary_cost + marketing_cost + infrastructure_cost + other_cost
+            burn_rate = max(0.0, total_costs - plan_mrr)
+            cash_balance += plan_mrr - total_costs
+
+            if burn_rate > 0:
+                runway = max(0.0, cash_balance) / burn_rate
+            else:
+                runway = 999.0
+
+            arpu = plan_mrr / total_customers if total_customers > 0 else 0.0
+            ltv = arpu / monthly_churn_rate if monthly_churn_rate > 0 else 0.0
+            ltv_cac_ratio = ltv / cac if cac > 0 else 0.0
+            cac_payback = cac / arpu if arpu > 0 else 0.0
+
+            month_name = self.month_names.get(month, f"Месяц {month}")
+            quarter = ((month - 1) // 3) + 1
+
+            monthly_plans.append({
+                "plan_id": plan_id,
+                "month_number": month,
+                "month_name": month_name,
+                "year": plan_year,
+                "quarter": quarter,
+                "plan_mrr": plan_mrr,
+                "plan_new_customers": new_customers,
+                "plan_expansion_mrr": 0.0,
+                "plan_churn_rate": monthly_churn_rate,
+                "plan_churned_mrr": plan_churned_mrr,
+                "plan_reactivated_mrr": 0.0,
+                "plan_marketing_budget": marketing_cost,
+                "plan_sales_budget": marketing_cost * 0.3,
+                "plan_cac_target": cac,
+                "plan_salaries": salary_cost,
+                "plan_office_rent": 0.0,
+                "plan_cloud_services": infrastructure_cost,
+                "plan_software_subscriptions": other_cost * 0.3,
+                "plan_legal_accounting": other_cost * 0.2,
+                "plan_marketing_ops": marketing_cost * 0.1,
+                "plan_other_opex": other_cost * 0.5,
+                "plan_capex_total": 0.0,
+                "plan_capex_equipment": 0.0,
+                "plan_capex_software": 0.0,
+                "plan_capex_furniture": 0.0,
+                "plan_capex_other": 0.0,
+                "plan_total_revenue": plan_mrr,
+                "plan_total_costs": total_costs,
+                "plan_burn_rate": burn_rate,
+                "plan_gross_margin": 0.8 if plan_mrr > 0 else 0.0,
+                "plan_runway": runway,
+                "plan_ltv_cac_ratio": ltv_cac_ratio,
+                "plan_cac_payback_months": cac_payback,
+                "plan_total_customers": total_customers,
+                "plan_churned_customers": churned_customers,
+                "plan_cash_balance": cash_balance,
+                "plan_cac": cac,
+                "plan_ltv": ltv,
+                "is_locked": False,
+                "seasonality_factor": 1.0
+            })
+
+            current_mrr = plan_mrr
+            current_customers = total_customers
+
+        return monthly_plans
     
     def _validate_inputs(self, inputs: FinancialPlanInputs):
         """Валидация входных данных"""
