@@ -417,11 +417,14 @@ class SAASDashboardApp:
                         # Обновляем страницу
                         st.rerun()
                     else:
+                        logger.error("Создание компании завершилось без ID: name=%s", name)
                         st.error("❌ Ошибка: Не удалось создать компанию")
 
                 except ValueError as e:
+                    logger.exception("Ошибка валидации при создании компании: %s", e)
                     st.error(f"❌ Ошибка при создании компании: {e}")
                 except Exception as e:
+                    logger.exception("Ошибка при создании компании: %s", e)
                     st.error(f"❌ Ошибка при создании компании: {str(e)}")
                     import traceback
                     st.error("Детали ошибки:")
