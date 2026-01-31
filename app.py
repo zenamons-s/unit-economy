@@ -16,6 +16,8 @@ import base64
 from typing import Dict, List, Optional, Any
 import sys
 import os
+from pathlib import Path
+import sqlite3
 
 
 # Добавляем пути к модулям
@@ -277,6 +279,57 @@ class SAASDashboardApp:
                 
                 st.success(f"Очищено {len(keys_to_delete)} ключей в session state!")
                 st.rerun()
+
+            st.markdown("---")
+            st.markdown("#### 🧭 DB Truth Panel")
+            db_path = Path(db_manager.db_path).resolve()
+            st.write(f"DB path: `{db_path}`")
+            st.write(f"DB file exists: {db_path.exists()}")
+
+            if st.button("🔄 Refresh DB view", key="refresh_db_view"):
+                st.success("DB view refreshed.")
+
+            if st.button("🧪 Run integrity check", key="integrity_check"):
+                try:
+                    with db_manager.get_connection() as conn:
+                        result = conn.execute("PRAGMA integrity_check").fetchone()[0]
+                    if result == "ok":
+                        st.success("Integrity check: OK")
+                    else:
+                        st.warning(f"Integrity check: {result}")
+                except sqlite3.Error as e:
+                    logger.exception("Ошибка проверки целостности БД: %s", e)
+                    st.error(f"Ошибка проверки целостности БД: {e}")
+
+            try:
+                with db_manager.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) AS count FROM companies")
+                    count_row = cursor.fetchone()
+                    company_count = count_row[0] if count_row else 0
+                    st.write(f"Companies count: {company_count}")
+
+                    cursor.execute(
+                        """
+                        SELECT id, name, stage, current_mrr AS mrr,
+                               current_customers AS customers, created_at
+                        FROM companies
+                        ORDER BY id DESC
+                        LIMIT 10
+                        """
+                    )
+                    rows = cursor.fetchall()
+                    if rows:
+                        st.dataframe(
+                            pd.DataFrame([dict(row) for row in rows]),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                    else:
+                        st.write("Нет компаний для отображения.")
+            except sqlite3.Error as e:
+                logger.exception("Ошибка DB Truth Panel: %s", e)
+                st.error(f"Ошибка DB Truth Panel: {e}")
             
             # Дополнительная отладочная информация
             if st.checkbox("Показать отладочную информацию", key="show_debug_info"):
@@ -387,6 +440,11 @@ class SAASDashboardApp:
             
             if submitted:
                 try:
+                    name = (name or "").strip()
+                    if not name:
+                        logger.error("Пустое название компании при создании.")
+                        st.error("❌ Название компании обязательно.")
+                        return
                     # ВАЖНО: Убедитесь, что мы используем правильный объект Company
                     # Импорт должен быть правильным
                     from database.db_manager import Company
