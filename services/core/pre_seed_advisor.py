@@ -353,41 +353,105 @@ class PreSeedAdvisor:
     def analyze_company(self, company_data: Union[int, Mapping[str, Any]]) -> Dict[str, Any]:
         """Анализ компании и выявление проблем"""
 
-        company_data = self._resolve_company_data(company_data)
+        try:
+            company_data = self._resolve_company_data(company_data)
 
-        analysis = {
-            "company_name": company_data.get("name", "Unnamed Company"),
-            "stage": company_data.get("stage", "pre_seed"),
+            analysis = {
+                "company_name": company_data.get("name", "Unnamed Company"),
+                "stage": company_data.get("stage", "pre_seed"),
+                "analysis_date": datetime.now().isoformat(),
+                "identified_challenges": [],
+                "recommended_patterns": [],
+                "common_mistakes_detected": [],
+                "action_plan": [],
+                "risk_assessment": {}
+            }
+
+            # Анализируем метрики компании
+            metrics = company_data.get("metrics", {})
+
+            # Выявляем вызовы на основе метрик
+            analysis["identified_challenges"] = self._identify_challenges(metrics, company_data)
+
+            # Рекомендуем подходящие паттерны роста
+            analysis["recommended_patterns"] = self._recommend_patterns(company_data)
+
+            # Проверяем на распространенные ошибки
+            analysis["common_mistakes_detected"] = self._detect_mistakes(company_data)
+
+            # Создаем план действий
+            analysis["action_plan"] = self._create_action_plan(
+                analysis["identified_challenges"],
+                analysis["recommended_patterns"]
+            )
+
+            # Оценка рисков
+            analysis["risk_assessment"] = self._assess_risks(analysis)
+
+            recommendations = self._build_recommendations(analysis)
+            return {
+                **analysis,
+                "recommendations": recommendations,
+                "risks": analysis.get("risk_assessment", {}).get("risk_factors", []),
+                "notes": ""
+            }
+        except Exception as exc:
+            logger.exception("Ошибка анализа компании: %s", exc)
+            return self._default_analysis(company_data, str(exc))
+
+    def _default_analysis(self, company_data: Union[int, Mapping[str, Any]],
+                          error_message: str) -> Dict[str, Any]:
+        """Фолбэк для анализа компании с гарантированным контрактом."""
+        resolved = {"name": "Unnamed Company", "stage": "pre_seed"}
+        try:
+            resolved = self._resolve_company_data(company_data)
+        except Exception:
+            logger.exception("Не удалось нормализовать данные компании для фолбэка.")
+        return {
+            "company_name": resolved.get("name", "Unnamed Company"),
+            "stage": resolved.get("stage", "pre_seed"),
             "analysis_date": datetime.now().isoformat(),
             "identified_challenges": [],
             "recommended_patterns": [],
             "common_mistakes_detected": [],
             "action_plan": [],
-            "risk_assessment": {}
+            "risk_assessment": {},
+            "recommendations": [],
+            "risks": [],
+            "notes": error_message
         }
-        
-        # Анализируем метрики компании
-        metrics = company_data.get("metrics", {})
-        
-        # Выявляем вызовы на основе метрик
-        analysis["identified_challenges"] = self._identify_challenges(metrics, company_data)
-        
-        # Рекомендуем подходящие паттерны роста
-        analysis["recommended_patterns"] = self._recommend_patterns(company_data)
-        
-        # Проверяем на распространенные ошибки
-        analysis["common_mistakes_detected"] = self._detect_mistakes(company_data)
-        
-        # Создаем план действий
-        analysis["action_plan"] = self._create_action_plan(
-            analysis["identified_challenges"],
-            analysis["recommended_patterns"]
-        )
-        
-        # Оценка рисков
-        analysis["risk_assessment"] = self._assess_risks(analysis)
-        
-        return analysis
+
+    def _build_recommendations(self, analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Сбор унифицированного списка рекомендаций для UI."""
+        recommendations: List[Dict[str, Any]] = []
+
+        for challenge in analysis.get("identified_challenges", []):
+            solutions = challenge.get("solutions", [])
+            recommendation_text = solutions[0] if solutions else challenge.get("description", "")
+            recommendations.append({
+                "category": challenge.get("category", "General"),
+                "priority": challenge.get("severity", "medium"),
+                "recommendation": recommendation_text,
+                "rationale": challenge.get("description", "")
+            })
+
+        for pattern in analysis.get("recommended_patterns", []):
+            recommendations.append({
+                "category": "Growth",
+                "priority": "medium",
+                "recommendation": f"Рассмотреть паттерн роста: {pattern.get('name', 'N/A')}",
+                "rationale": pattern.get("description", "")
+            })
+
+        for action in analysis.get("action_plan", []):
+            recommendations.append({
+                "category": action.get("category", "General"),
+                "priority": action.get("priority", "medium"),
+                "recommendation": action.get("action", ""),
+                "rationale": action.get("expected_outcome", "")
+            })
+
+        return recommendations
     
     def _identify_challenges(self, metrics: Dict[str, float], company_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Идентификация вызовов на основе метрик компании"""

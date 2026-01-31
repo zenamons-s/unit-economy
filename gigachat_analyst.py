@@ -8,7 +8,7 @@ import os
 import json
 from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import requests
 from enum import Enum
 import base64
